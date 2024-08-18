@@ -1,0 +1,20 @@
+# ベースイメージとしてRustを使用
+FROM rust:1.80.1-slim-bullseye
+
+# 作業ディレクトリを設定
+WORKDIR /usr/src/myapp
+
+# Cargo.tomlとCargo.lockをコピー
+COPY Cargo.toml Cargo.lock ./
+
+# ソースコードをコピー
+COPY src ./src
+
+# 依存関係をダウンロード
+RUN cargo build --release
+
+# プロジェクトをビルド
+RUN cargo install --path .
+
+# 実行可能ファイルを実行
+CMD ["hello_world"]
