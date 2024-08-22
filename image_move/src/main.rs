@@ -17,8 +17,9 @@ struct GyazoFile {
 impl GyazoFile {
     /** upload処理の実行 */
     async fn upload(target_file_name: &String) -> Result<(), ExitFailure> {
-        let url = format!("https://upload.gyazo.com/api/upload");
+        println!("Uploading file: {}", target_file_name);
 
+        let url = format!("https://upload.gyazo.com/api/upload");
         let gyazo_api_token = env::var("GYAZO_APP_TOKEN").expect("GYAZO_APP_TOKEN must be set");
 
         let client = Client::new();
@@ -40,17 +41,21 @@ impl GyazoFile {
             .await?;
 
         println!("Status: {}", res.status());
-        println!("Headers:\n{:#?}", res.headers());
-        println!("Body:\n{}", res.text().await?);
+        println!("Upload Finished: {}", target_file_name);
         Ok(())
     }
 }
 
 async fn get_image_files(image_dir: &String) -> Result<Vec<String>, ExitFailure> {
-    Ok(vec![format!("./{}/{}", image_dir, "reason_img01.jpg")])
+    let image_vec: Vec<String> = vec!["reason_img01.jpg", "beach.jpg", "image.png"]
+        .iter()
+        .map(|filename| format!("{}/{}", image_dir, filename))
+        .collect();
+
+    Ok(image_vec)
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread", worker_threads = 4)]
 async fn main() -> Result<(), ExitFailure> {
     dotenv().ok();
 
@@ -66,8 +71,24 @@ async fn main() -> Result<(), ExitFailure> {
 
     let target_file_names = get_image_files(&image_dir).await?;
 
-    let file_name = target_file_names.first().unwrap();
-    let res = GyazoFile::upload(&file_name).await?;
-    println!("{:?}", res);
+    let handles: Vec<_> = target_file_names
+        .iter()
+        .map(|file_name| {
+            let file_name = file_name.clone();
+            tokio::spawn(async move {
+                match GyazoFile::upload(&file_name).await {
+                    Ok(res) => println!("{:?}", res),
+                    Err(e) => eprintln!("Error uploading file: {:?}", e),
+                }
+            })
+        })
+        .collect();
+
+    for handle in handles {
+        if let Err(e) = handle.await {
+            eprintln!("Task failed: {:?}", e);
+        }
+    }
+
     Ok(())
 }
